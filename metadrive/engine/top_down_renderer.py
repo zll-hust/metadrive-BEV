@@ -190,6 +190,9 @@ class TopDownRenderer:
         draw_center_line=False,
         semantic_broken_line=True,
         draw_contour=True,
+        contour_width=2,
+        semantic_target_vehicle_color=None,
+        semantic_traffic_vehicle_color=None,
         window=True,
         screen_record=False,
         center_on_map=False,
@@ -232,6 +235,12 @@ class TopDownRenderer:
 
             draw_contour: Whether to draw a counter for objects
 
+            contour_width: Width of the vehicle contour in pixels
+
+            semantic_target_vehicle_color: Optional RGB color for the tracked ego vehicle when semantic_map=True.
+
+            semantic_traffic_vehicle_color: Optional RGB color for other vehicles when semantic_map=True.
+
             window: Whether to pop up the window. Setting it to 'False' enables off-screen rendering
 
             screen_record: Whether to record the episode. The recorded result can be accessed by
@@ -260,6 +269,7 @@ class TopDownRenderer:
         self.show_agent_name = show_agent_name
         self.draw_target_vehicle_trajectory = draw_target_vehicle_trajectory
         self.contour = draw_contour
+        self.contour_width = contour_width
         self.semantic_broken_line = semantic_broken_line
         self.no_window = not window
 
@@ -281,6 +291,8 @@ class TopDownRenderer:
         self._font_size = 25
         self._text_render_interval = 20
         self.semantic_map = semantic_map
+        self.semantic_target_vehicle_color = semantic_target_vehicle_color
+        self.semantic_traffic_vehicle_color = semantic_traffic_vehicle_color
         self.scaling = scaling
         self.film_size = film_size
         self._screen_size = screen_size
@@ -415,6 +427,17 @@ class TopDownRenderer:
     def current_track_agent(self):
         return self.engine.current_track_agent
 
+    def _semantic_color(self, obj):
+        color = TopDownSemanticColor.get_color(obj.type)
+        if MetaDriveType.is_vehicle(obj.type):
+            is_target = self.current_track_agent is not None and obj.name == self.current_track_agent.name
+            custom_color = (
+                self.semantic_target_vehicle_color if is_target else self.semantic_traffic_vehicle_color
+            )
+            if custom_color is not None:
+                color = np.asarray(custom_color)
+        return color
+
     @staticmethod
     def _append_frame_objects(objects):
         """
@@ -461,7 +484,7 @@ class TopDownRenderer:
                 x = abs(int(i))
                 alpha_f = x / len(self.history_objects)
                 if self.semantic_map:
-                    c = TopDownSemanticColor.get_color(v.type) * (1 - alpha_f) + alpha_f * 255
+                    c = self._semantic_color(v) * (1 - alpha_f) + alpha_f * 255
                 else:
                     c = (c[0] + alpha_f * (255 - c[0]), c[1] + alpha_f * (255 - c[1]), c[2] + alpha_f * (255 - c[2]))
                 ObjectGraphics.display(object=v, surface=self._frame_canvas, heading=h, color=c, draw_contour=False)
@@ -497,11 +520,16 @@ class TopDownRenderer:
             h = h if abs(h) > 2 * np.pi / 180 else 0
             alpha_f = 0
             if self.semantic_map:
-                c = TopDownSemanticColor.get_color(v.type) * (1 - alpha_f) + alpha_f * 255
+                c = self._semantic_color(v) * (1 - alpha_f) + alpha_f * 255
             else:
                 c = (c[0] + alpha_f * (255 - c[0]), c[1] + alpha_f * (255 - c[1]), c[2] + alpha_f * (255 - c[2]))
             ObjectGraphics.display(
-                object=v, surface=self._frame_canvas, heading=h, color=c, draw_contour=self.contour, contour_width=2
+                object=v,
+                surface=self._frame_canvas,
+                heading=h,
+                color=c,
+                draw_contour=self.contour,
+                contour_width=self.contour_width
             )
 
         if not hasattr(self, "_deads"):
